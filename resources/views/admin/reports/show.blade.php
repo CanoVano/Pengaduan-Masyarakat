@@ -3,6 +3,11 @@
 @section('title', 'Detail Laporan #' . $report->id)
 @section('page-title', 'Detail Laporan')
 
+@section('head')
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+@endsection
+
 @section('content')
     {{-- Breadcrumb --}}
     <div class="breadcrumb">
@@ -98,10 +103,12 @@
             </div>
         </div>
 
+        {{-- Lokasi: embedded map --}}
         <div class="detail-card animate-in">
             <div class="card-header">📍 Lokasi</div>
-            <div class="card-body">
-                <div class="detail-info">
+            <div class="card-body" style="flex-direction:column; align-items:stretch;">
+                <div class="map-container" id="reportMap"></div>
+                <div class="detail-info" style="margin-bottom: 12px;">
                     <div class="info-row">
                         <div class="info-icon">🌐</div>
                         <div>
@@ -110,38 +117,36 @@
                         </div>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <a href="https://www.google.com/maps?q={{ $report->latitude }},{{ $report->longitude }}" target="_blank" class="btn btn-info" style="width: 100%;">
-                        📍 Lihat Lokasi di Google Maps
-                    </a>
-                </div>
+                <a href="https://www.google.com/maps?q={{ $report->latitude }},{{ $report->longitude }}" target="_blank" class="btn btn-info" style="width: 100%;">
+                    📍 Buka di Google Maps
+                </a>
             </div>
         </div>
     </div>
 
     {{-- Action Panel --}}
-    @if($report->status !== 'Selesai')
-        <div class="action-panel animate-in">
-            <div class="card-header">⚡ Aksi</div>
-            <div class="card-body">
-                <div class="action-buttons">
-                    @if($report->status === 'Menunggu')
-                        <form action="{{ route('admin.reports.updateStatus', $report->id) }}" method="POST" style="flex:1; display:flex;">
-                            @csrf
-                            @method('PUT')
-                            <input type="hidden" name="status" value="Diproses">
-                            <button type="submit" class="btn btn-warning" style="flex:1;">
-                                🔄 Ubah ke Diproses
-                            </button>
-                        </form>
-                    @endif
-
-                    @if($report->status === 'Menunggu' || $report->status === 'Diproses')
-                        <button type="button" class="btn btn-success" style="flex:1;" onclick="toggleUpload()">
-                            ✅ Selesaikan Laporan
+    <div class="action-panel animate-in">
+        <div class="card-header">⚡ Aksi</div>
+        <div class="card-body">
+            @if($report->status !== 'Selesai')
+            <div class="action-buttons">
+                @if($report->status === 'Menunggu')
+                    <form id="formDiproses" action="{{ route('admin.reports.updateStatus', $report->id) }}" method="POST" style="flex:1; display:flex;">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="status" value="Diproses">
+                        <button type="button" class="btn btn-warning" style="flex:1;" onclick="confirmDiproses()">
+                            🔄 Ubah ke Diproses
                         </button>
-                    @endif
-                </div>
+                    </form>
+                @endif
+
+                @if($report->status === 'Menunggu' || $report->status === 'Diproses')
+                    <button type="button" class="btn btn-success" style="flex:1;" onclick="toggleUpload()">
+                        ✅ Selesaikan Laporan
+                    </button>
+                @endif
+            </div>
 
                 {{-- Upload Foto After --}}
                 <div class="upload-section" id="uploadSection">
@@ -166,19 +171,48 @@
                         @enderror
 
                         <div class="mt-4">
-                            <button type="submit" class="btn btn-success" style="width:100%; padding: 16px;" id="submitBtn" disabled>
+                            <button type="button" class="btn btn-success" style="width:100%; padding: 16px;" id="submitBtn" disabled onclick="confirmComplete()">
                                 ✅ Konfirmasi & Selesaikan Laporan
                             </button>
                         </div>
                     </form>
                 </div>
+            @endif
+
+            {{-- Delete Button --}}
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light);">
+                <form id="formDelete" action="{{ route('admin.reports.destroy', $report->id) }}" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    <button type="button" class="btn btn-danger" style="width:100%;" onclick="confirmDelete()">
+                        🗑️ Hapus Laporan
+                    </button>
+                </form>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:8px; text-align:center;">
+                    Gunakan jika foto tidak sesuai atau laporan spam
+                </p>
             </div>
         </div>
-    @endif
+    </div>
 @endsection
 
 @section('scripts')
 <script>
+    // ── Leaflet Map ──
+    const lat = {{ $report->latitude }};
+    const lng = {{ $report->longitude }};
+    const map = L.map('reportMap').setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+    L.marker([lat, lng]).addTo(map)
+        .bindPopup('<strong>Laporan #{{ $report->id }}</strong><br>{{ Str::limit($report->deskripsi, 30) }}')
+        .openPopup();
+
+    // Fix leaflet rendering in hidden/animated containers
+    setTimeout(() => map.invalidateSize(), 500);
+
+    // ── Upload toggle ──
     function toggleUpload() {
         const section = document.getElementById('uploadSection');
         section.classList.toggle('visible');
@@ -198,7 +232,7 @@
         }
     }
 
-    // Drag and drop
+    // ── Drag & Drop ──
     const uploadArea = document.getElementById('uploadArea');
     if (uploadArea) {
         uploadArea.addEventListener('dragover', function(e) {
@@ -215,6 +249,55 @@
             const input = document.getElementById('fotoAfter');
             input.files = e.dataTransfer.files;
             previewImage(input);
+        });
+    }
+
+    // ── Confirmation Modals ──
+    function confirmDiproses() {
+        openModal({
+            icon: '🔄',
+            title: 'Ubah Status ke Diproses?',
+            message: 'Status laporan akan diubah menjadi "Diproses" dan notifikasi akan dikirim ke pelapor.',
+            confirmText: 'Ya, Proses',
+            btnClass: 'btn-warning',
+            onConfirm: function() {
+                const form = document.getElementById('formDiproses');
+                const btn = form.querySelector('.btn');
+                btn.classList.add('loading');
+                form.submit();
+            }
+        });
+    }
+
+    function confirmComplete() {
+        openModal({
+            icon: '✅',
+            title: 'Selesaikan Laporan?',
+            message: 'Laporan akan ditandai selesai dengan foto after yang sudah diupload. Notifikasi akan dikirim ke pelapor.',
+            confirmText: 'Ya, Selesaikan',
+            btnClass: 'btn-success',
+            onConfirm: function() {
+                const btn = document.getElementById('submitBtn');
+                btn.classList.add('loading');
+                document.getElementById('completeForm').submit();
+            }
+        });
+    }
+
+    // ── Delete Confirmation ──
+    function confirmDelete() {
+        openModal({
+            icon: '🗑️',
+            title: 'Hapus Laporan Ini?',
+            message: 'Laporan #{{ $report->id }} akan dihapus secara permanen beserta semua foto terkait. Tindakan ini tidak dapat dibatalkan.',
+            confirmText: 'Ya, Hapus',
+            btnClass: 'btn-danger',
+            onConfirm: function() {
+                const form = document.getElementById('formDelete');
+                const btn = form.querySelector('.btn');
+                btn.classList.add('loading');
+                form.submit();
+            }
         });
     }
 
