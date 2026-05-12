@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["...", "nginx"]
+
+[start]
+cmd = "php artisan storage:link --force && php artisan migrate --force && nginx -c /app/nginx.conf & php-fpm"
