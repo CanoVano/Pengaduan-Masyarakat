@@ -7,12 +7,16 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\RekapController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\MapController;
+use App\Http\Controllers\StorageController;
 
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
 */
+
+// Serve storage files directly (fallback for when symlinks don't work on Railway/cloud)
+Route::get('/storage/{path}', [StorageController::class, 'show'])->where('path', '.*')->name('storage.serve');
 
 // Redirect root to admin login
 Route::get('/', function () {
